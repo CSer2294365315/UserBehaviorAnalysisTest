@@ -40,7 +40,7 @@ object LoginFailWithCep {
 
     // 2. 定义一个 pattern，用来检测 dataStream里的连续登录失败事件
     val loginFailPattern: Pattern[LoginEvent, LoginEvent] = Pattern
-      .begin[LoginEvent]("firstFail").where(_.eventType == "fail")    // 第一次登录失败
+      .begin[LoginEvent]("firstFail").where(_.eventType == "fail")   // 第一次登录失败
       .next("secondFail").where(_.eventType == "fail")    // 第二次登录失败
       .within(Time.seconds(5))
 
