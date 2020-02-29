@@ -41,7 +41,6 @@ object HotPageAnalysis {
     env.setParallelism(1)
     env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
 
-
     val resource = getClass.getResource("/apache.log")
     val dataStream = env.readTextFile(resource.getPath)
       .map(data => {
@@ -131,7 +130,6 @@ class TopNHotUrls(topSize: Int) extends KeyedProcessFunction[Long, UrlViewCount,
       //TODO 把Map状态中存的URL统计数据，提取出来，方便排序。不然在Map里面不方便排序
       allUrlsCount += ((entry.getKey, entry.getValue))
     }
-
 
     //TODO 排序，取TopN
     val sortedUrlsCount = allUrlsCount.sortWith(_._2 > _._2).take(topSize)
