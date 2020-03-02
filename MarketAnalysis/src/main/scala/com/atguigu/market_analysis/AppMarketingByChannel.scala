@@ -28,7 +28,9 @@ case class MarketUserBehavior(userId: String, behavior: String, channel: String,
 // 输出样例类
 case class MarketViewCountByChannel(windowStart: String, windowEnd: String, channel: String, behavior: String, count: Long)
 
-// 自定义数据源
+/**
+  * 造数据的，实际工作做测试也会用到
+  */
 class SimulatedDataSource() extends RichParallelSourceFunction[MarketUserBehavior]{
   // 是否运行的标识位
   var running = true
@@ -56,20 +58,36 @@ class SimulatedDataSource() extends RichParallelSourceFunction[MarketUserBehavio
   }
 }
 
+
+/**
+  * 对于统计窗口时间内，数量的，都是keyBy+window+process（Win）+ES
+  * 对于统计窗口时间内，topN的，都是keyBy+window+process+ keyBy（windowEnd）+ process（定时器）
+  *
+  * TODO 需求： 各个渠道的引流效果，或者叫推广效果的动态变化
+  * 求窗口时间内，从各个渠道来的各种操作的数量
+  *
+  * 动态变化，就是用窗口来实现的
+  */
 object AppMarketingByChannel {
   def main(args: Array[String]): Unit = {
     val env = StreamExecutionEnvironment.getExecutionEnvironment
     env.setParallelism(1)
     env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
 
-    // 生成数据
+    //TODO 对接日志采集通道
     val dataStream = env.addSource(new SimulatedDataSource())
       .assignAscendingTimestamps(_.timestamp)
-    // 开窗聚合处理
+
+    /**
+      * TODO 统计渠道动态引流效果：常规套路，动态，肯定要开窗。不同渠道的引流效果，那就是分类查个数，分类查个数，就用keyBy+aggregate就可以了，光聚合还不够，还得能区分是哪个窗口的数据，所以还需要加上windowFunction。然后把流的数据直接输出到ES里面，在ES里面，写查询语句，按照窗口时间，一次查一批数据，就可以了
+      */
     val processedStream = dataStream
       .filter(_.behavior != "UNINSTALL")
       .keyBy( data => (data.channel, data.behavior) )
       .timeWindow(Time.hours(1), Time.seconds(5))
+    /**
+      * TODO 使用keyBy+window+aggregate（AggregateFunction，WindowFunction）完成的，都可以用keyBy+window+process(ProcessWindowFunction来完成)
+      */
       .process( new MarketCountByChannel() )
 
     processedStream.print()
@@ -77,7 +95,10 @@ object AppMarketingByChannel {
   }
 }
 
-// 自定义的 Process Window Function
+
+/**
+  * TODO 窗口内聚合，访问window时间戳
+  */
 class MarketCountByChannel() extends ProcessWindowFunction[MarketUserBehavior, MarketViewCountByChannel, (String, String), TimeWindow]{
   override def process(key: (String, String), context: Context, elements: Iterable[MarketUserBehavior], out: Collector[MarketViewCountByChannel]): Unit = {
     // 从上下文中获取window信息，包装成样例类
@@ -86,3 +107,5 @@ class MarketCountByChannel() extends ProcessWindowFunction[MarketUserBehavior, M
     out.collect( MarketViewCountByChannel(start, end, key._1, key._2, elements.size) )
   }
 }
+
+

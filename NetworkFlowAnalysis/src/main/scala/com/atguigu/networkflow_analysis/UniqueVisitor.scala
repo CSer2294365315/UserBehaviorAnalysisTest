@@ -2,59 +2,61 @@ package com.atguigu.networkflow_analysis
 
 import org.apache.flink.streaming.api.TimeCharacteristic
 import org.apache.flink.streaming.api.scala._
-import org.apache.flink.streaming.api.scala.function.AllWindowFunction
+import org.apache.flink.streaming.api.scala.function.{AllWindowFunction, ProcessAllWindowFunction}
 import org.apache.flink.streaming.api.windowing.time.Time
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow
 import org.apache.flink.util.Collector
 
-/**
-  * Copyright (c) 2018-2028 尚硅谷 All Rights Reserved 
-  *
-  * Project: UserBehaviorAnalysis
-  * Package: com.atguigu.networkflow_analysis
-  * Version: 1.0
-  *
-  * Created by wushengran on 2020/2/25 14:26
-  */
 
 case class UvCount(windowEnd: Long, count: Long)
 
+/**
+  * UV：每个小时，访问网站的独立访客数
+  * 只对一小时内的访客进行去重
+  *
+  * 结果形式：
+  * 10:00~11:00 UV=5000
+  * 11:00~12:00 UV=3000
+  */
 object UniqueVisitor {
   def main(args: Array[String]): Unit = {
     val env = StreamExecutionEnvironment.getExecutionEnvironment
     env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
     env.setParallelism(1)
 
-    // 读取数据
     val resource = getClass.getResource("/UserBehavior.csv")
     val dataStream = env.readTextFile(resource.getPath)
-      .map( data => {
+      .map(data => {
         val dataArray = data.split(",")
-        UserBehavior( dataArray(0).toLong, dataArray(1).toLong, dataArray(2).toInt, dataArray(3), dataArray(4).toLong )
-      } )
+        UserBehavior(dataArray(0).toLong, dataArray(1).toLong, dataArray(2).toInt, dataArray(3), dataArray(4).toLong)
+      })
       .assignAscendingTimestamps(_.timestamp * 1000L)
 
-    // 开窗聚合
+    //TODO 把整个窗口的数据拿下来， 进行窗口内的去重
     val processedStream = dataStream
       .filter(_.behavior == "pv")
-      .timeWindowAll(Time.hours(1))    // 滚动窗口，统计每个小时的pv量
-      .apply( new UvCountByWindow() )
+      //TODO dataStream，只能用WindowAll
+      .timeWindowAll(Time.hours(1))
+      .apply(new UvCountByWindow())
 
     processedStream.print()
     env.execute("unique visitor job")
   }
 }
 
-// 自定义全窗口函数
-class UvCountByWindow() extends AllWindowFunction[UserBehavior, UvCount, TimeWindow]{
+/**
+  * 把整个窗口的数据拿出来，然后放到Set里面去重，Set里面有多少个元素，这个窗口期间的UV就有多少
+  */
+class UvCountByWindow() extends AllWindowFunction[UserBehavior, UvCount, TimeWindow] {
   override def apply(window: TimeWindow, input: Iterable[UserBehavior], out: Collector[UvCount]): Unit = {
-    // 用一个set类型来保存所有的userId，做到自动去重
+    //TODO 使用全窗口函数apply，把同一个窗口的数据给拿出来，然后使用set进行去重，就得到了这个小时内部去重之后的UV。两个窗口之间不做去重，只进行内部去重。缺点：如果数据量大，都放在Set里面，也就是内存里面，容易OOM。
+    //TODO 改进方法，如果数据量不大，直接使用Redis的Set去重，如果数据量大的话，使用Redis+布隆过滤器去重
     var idSet = Set[Long]()
-    // 遍历窗口所有数据，全部放入set中
-    for( userBehavior <- input ){
+    for (userBehavior <- input) {
       idSet += userBehavior.userId
     }
-    // 输出 UvCount 统计结果
-    out.collect( UvCount(window.getEnd, idSet.size) )
+    //TODO 输出UV的统计结果
+    out.collect(UvCount(window.getEnd, idSet.size))
   }
 }
+
