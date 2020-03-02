@@ -25,6 +25,10 @@ case class OrderEvent(orderId: Long, eventType: String, txId: String, eventTime:
 // 输出订单检测结果样例类
 case class OrderResult(orderId: Long, resultMsg: String)
 
+
+/**
+  * TODO 订单支付情况实时监控（刷单行为实时监控）
+  */
 object OrderTimeout {
   def main(args: Array[String]): Unit = {
     val env = StreamExecutionEnvironment.getExecutionEnvironment
@@ -43,29 +47,32 @@ object OrderTimeout {
       })
       .keyBy(_.orderId)
 
-    // 1. 定义一个带时间限制的模式
+    //TODO 使用CEP进行模式匹配，要求创建订单后，15分钟内完成支付。具体实现的话，就是首先匹配到创建订单的事件，创建订单事件后面非严格紧邻一个支付事件，在15分钟内完成匹配
     val orderPayPattern = Pattern
       .begin[OrderEvent]("create").where(_.eventType == "create")
       .followedBy("pay").where(_.eventType == "pay")
       .within(Time.minutes(15))
 
-    // 2. 在orderEventStream上应用pattern，生成一个PatternStream
+    //TODO 把这个模式，应用到流上，把流里面匹配上的事件给输出到一个新的流里面去，PatternStream
     val patternStream = CEP.pattern(orderEventStream, orderPayPattern)
 
     // 3. 定义一个侧输出流标签，用于把 timeout事件输出到侧输出流里去
     val orderTimeoutOutputTag = new OutputTag[OrderResult]("orderTimeout")
-    // 4. 调用select方法，得到最终的输出结果
+
+    //TODO 正确时间内匹配上的事件串，存在主流里面。超时匹配上的事件串，存在侧输出流里面，比如对于先创建了订单，15分钟后进行了支付，那么这个创建订单的事件和支付的事件，组成的事件串，存在侧输出流中。如果想要这部分超时事件的话，到侧输出流里面去获取
     val resultStream = patternStream.select( orderTimeoutOutputTag,
       new OrderTimeoutSelect(),
       new OrderPaySelect())
 
     resultStream.print("payed")
+    //TODO 超时匹配上的，到侧输出流里面获取
     resultStream.getSideOutput(orderTimeoutOutputTag).print("timeout")
     env.execute("order timeout detect job")
   }
 }
 
-// 自定义一个PatternTimeoutFunction
+
+//TODO 从流中，匹配到超时的事件串
 class OrderTimeoutSelect() extends PatternTimeoutFunction[OrderEvent, OrderResult]{
   override def timeout(pattern: util.Map[String, util.List[OrderEvent]], timeoutTimestamp: Long): OrderResult = {
     val timeoutOrderId = pattern.get("create").iterator().next().orderId
@@ -73,7 +80,7 @@ class OrderTimeoutSelect() extends PatternTimeoutFunction[OrderEvent, OrderResul
   }
 }
 
-// 自定义一个 PatternSelectFunction
+//TODO 从流中，抓取在规定时间内匹配上的事件串
 class OrderPaySelect() extends PatternSelectFunction[OrderEvent, OrderResult]{
   override def select(pattern: util.Map[String, util.List[OrderEvent]]): OrderResult = {
     val payedOrderId = pattern.get("pay").iterator().next().orderId

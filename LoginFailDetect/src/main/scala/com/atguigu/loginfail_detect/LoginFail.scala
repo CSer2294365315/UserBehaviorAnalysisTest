@@ -24,6 +24,10 @@ case class LoginEvent(userId: Long, ip: String, eventType: String, eventTime: Lo
 // 输出报警信息样例类
 case class Warning(userId: Long, firstFailTime: Long, lastFailTime: Long, msg: String)
 
+/**
+  * TODO 恶意登录监控
+  * 2秒内，发生两次连续的登录失败，就判定为恶意登录
+  */
 object LoginFail {
   def main(args: Array[String]): Unit = {
     val env = StreamExecutionEnvironment.getExecutionEnvironment
