@@ -22,8 +22,14 @@ import org.apache.flink.util.Collector
 // 输入数据样例类，OrderEvent用之前的
 case class ReceiptEvent( txId: String, payChannel: String, eventTime: Long )
 
+
+
+/**
+  * TODO 实时对账
+  * 支付完了，是否及时的显示订单事件完成了。或者订单事件结束了，是否及时的显示支付完成了。如果超时，就报警。统计实时的报警数量
+  */
 object OrderTxMatch {
-  // 为了公用OutputTag，直接定义出来
+  //TODO 把不同类型的预警日志，发到不同的侧输出流里面，以后就不需要再费力去区分了
   val unmatchedPays = new OutputTag[OrderEvent]("unmatchedPays")
   val unmatchedReceipts = new OutputTag[ReceiptEvent]("unmatchedReceipts")
 
@@ -32,11 +38,7 @@ object OrderTxMatch {
     env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
     env.setParallelism(1)
 
-
-
-    // 读取数据，来自Order和Receipt两条流
-
-    //TODO Order数据流
+    //TODO 读取Order数据流
     val orderPayResource = getClass.getResource("/OrderLog.csv")
     val orderEventStream = env.readTextFile(orderPayResource.getPath)
       .map( data => {
@@ -46,11 +48,13 @@ object OrderTxMatch {
       .assignTimestampsAndWatermarks(new BoundedOutOfOrdernessTimestampExtractor[OrderEvent](Time.seconds(0)) {
         override def extractTimestamp(element: OrderEvent): Long = element.eventTime * 1000L
       })
-      .filter( _.txId != "" )    // 过滤出txId不为空的订单支付事件
-      .keyBy(_.txId)    // 用交易号分组进行两条流的匹配  //TODO 订单流--(交易号，订单日志）  第三方支付流水流--（交易号，流水日志）
+      .filter( _.txId != "" )
+      // TODO 用交易号进行分组。
+      //  订单流--(交易号，订单日志）  第三方支付流水流--（交易号，流水日志）
+      .keyBy(_.txId)
 
 
-    //TODO Receipt数据流
+    //TODO 读取Receipt数据流
     val receiptResource = getClass.getResource("/ReceiptLog.csv")
     val receiptEventStream = env.readTextFile(receiptResource.getPath)
       .map( data => {
@@ -60,9 +64,9 @@ object OrderTxMatch {
       .assignTimestampsAndWatermarks(new BoundedOutOfOrdernessTimestampExtractor[ReceiptEvent](Time.seconds(0)) {
         override def extractTimestamp(element: ReceiptEvent): Long = element.eventTime * 1000L
       })
-      .keyBy(_.txId)    // 用交易号分组进行两条流的匹配
+      .keyBy(_.txId)
 
-    // 合流并处理
+    //TODO Connect，把相同交易号的两条流中的元素集合在一起，然后判断是否超时，判断是否超时的方法，是如果自己到了，对方还没到，那就设置在5秒之后，生成预警日志。在生成预警日志之前，还要判断一下，如果发现对方已经到了，那就不生成预警日志了
     val processedStream = orderEventStream.connect(receiptEventStream)
       .process(new OrderTxPayMatch())
 
@@ -72,12 +76,10 @@ object OrderTxMatch {
     env.execute("order tx match")
   }
 
-  // 自定义实现一个CoProcessFunction
+
+
+  //TODO 进行两个流的connect后的聚合的逻辑
   class OrderTxPayMatch() extends CoProcessFunction[OrderEvent, ReceiptEvent, (OrderEvent, ReceiptEvent)]{
-
-
-    // 用两个value state，来保存当前交易的支付事件和到账事件
-
     //TODO 值类型，订单事件
     lazy val payState: ValueState[OrderEvent] = getRuntimeContext.getState(new ValueStateDescriptor[OrderEvent]("order-pay", classOf[OrderEvent]))
     //TODO 值类型 到账事件
