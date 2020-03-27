@@ -57,6 +57,7 @@ object LoginFail {
     env.execute("login fail detect job")
   }
 }
+//well
 
 class LoginWarning(maxFailTimes: Int) extends KeyedProcessFunction[Long, LoginEvent, Warning] {
   //TODO 保存上次是否登录失败的list状态
