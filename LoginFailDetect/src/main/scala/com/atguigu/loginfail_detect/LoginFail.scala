@@ -59,6 +59,7 @@ object LoginFail {
 }
 
 
+
 class LoginWarning(maxFailTimes: Int) extends KeyedProcessFunction[Long, LoginEvent, Warning] {
   //TODO 保存上次是否登录失败的list状态
   lazy val loginFailListState: ListState[LoginEvent] = getRuntimeContext.getListState(
