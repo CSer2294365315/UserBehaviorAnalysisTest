@@ -51,7 +51,7 @@ object AdAnalyisis {
     val filterBlackListStream = adLogStream
       .keyBy(data => (data.userId, data.adId))
       //TODO process 只要没开窗，就不会等到整个窗口数据都到齐了才处理，而是来一条数据就处理一条数据（KeyedProcessFunction）。如果开窗了，也就是ProcessWindowFunction，那就会等窗口的数据都到齐了再处理。
-      //TODO keyedProcessFunction，一条一条处理，定时器，侧输出流。windowProcessWindowFunction，一个窗口一个窗口的处理，window信息，侧输出流
+      //TODO keyedProcessFunction，一条一条处理，定时器，侧输出流。ProcessWindowFunction，一个窗口一个窗口的处理，window信息，侧输出流
       .process(new FilterBlackListUser(100))
 
 

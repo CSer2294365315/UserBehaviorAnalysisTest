@@ -31,6 +31,7 @@ object UvWithBloom {
       .assignAscendingTimestamps(_.timestamp * 1000L)
 
     //TODO 把整个窗口的数据拿下来，进行窗口内的去重
+    //TODO keyBy+window+process（Trigger）
     val processedStream = dataStream
       .filter(_.behavior == "pv")
       .map(data => ("uv", data.userId))
