@@ -33,6 +33,7 @@ object KafkaProducerTest {
       val record = new ProducerRecord[String, String](topic, line)
       producer.send(record)
     }
+    //hello,world
     producer.close()
   }
 }
