@@ -34,6 +34,5 @@ object KafkaProducerTest {
       producer.send(record)
     }
     producer.close()
-    //test 2
   }
 }
